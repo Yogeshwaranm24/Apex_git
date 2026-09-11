@@ -1,0 +1,105 @@
+HR Workflow
+
+When the manager approves:
+
+PENDING_MANAGER --> Manager Approves --> PENDING_HR --> Create HR Task
+
+HR task will be assigned to HR employee or HR group/role:
+
+HR_ROLE --> HR User 1 --> HR User 2 --> HR User 3
+
+For HR rejection:
+
+UPDATE leave_request
+   SET status = 'REJECTED',
+       updated_date = SYSTIMESTAMP
+ WHERE request_id = :P30_REQUEST_ID
+   AND status = 'PENDING_HR';
+
+For Leave Request History:
+
+INSERT INTO leave_request_history (
+    request_id,
+    action_by,
+    action_role,
+    action,
+    old_status,
+    new_status,
+    comments
+)
+VALUES (
+    :P30_REQUEST_ID,
+    :CURRENT_EMPLOYEE_ID,
+    'HR',
+    'REJECT',
+    'PENDING_HR',
+    'REJECTED',
+    :P30_COMMENTS
+);
+
+HR Approve after Deducting Leave Balance:
+
+When HR approves:
+
+Validate request is PENDING_HR --> Validate sufficient leave balance --> Deduct leave balance --> Set request APPROVED --> Insert audit record --> Commit --> Notify employee
+
+For example recommend the balance update atomically:
+
+UPDATE employee
+   SET leave_balance = leave_balance - (
+       SELECT number_of_days
+       FROM leave_request
+       WHERE request_id = :P30_REQUEST_ID
+   )
+ WHERE employee_id = (
+       SELECT employee_id
+       FROM leave_request
+       WHERE request_id = :P30_REQUEST_ID
+   )
+ AND leave_balance >= (
+       SELECT number_of_days
+       FROM leave_request
+       WHERE request_id = :P30_REQUEST_ID
+   );
+
+To verify the insufficient leave balance:
+
+IF SQL%ROWCOUNT <> 1 THEN
+    RAISE_APPLICATION_ERROR(
+        -20002,
+        'Insufficient leave balance.'
+    );
+END IF;
+
+For update the leave request:
+
+UPDATE leave_request
+   SET status = 'APPROVED',
+       updated_date = SYSTIMESTAMP
+ WHERE request_id = :P30_REQUEST_ID
+   AND status = 'PENDING_HR';
+
+For Insert Leave request History:
+
+INSERT INTO leave_request_history (
+    request_id,
+    action_by,
+    action_role,
+    action,
+    old_status,
+    new_status,
+    comments
+)
+VALUES (
+    :P30_REQUEST_ID,
+    :CURRENT_EMPLOYEE_ID,
+    'HR',
+    'APPROVE',
+    'PENDING_HR',
+    'APPROVED',
+    :P30_COMMENTS
+);
+
+
+
+

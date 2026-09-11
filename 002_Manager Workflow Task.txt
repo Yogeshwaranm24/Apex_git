@@ -1,0 +1,116 @@
+/* The Manager assign workflow task should contain at least:
+
+Request ID
+Employee ID
+Employee Name
+Leave Type
+From Date
+To Date
+Number of Days
+Reason
+Manager ID
+
+For example Leave Request 1001 --> APEX Human Task --> Assignee = manager_id 205;
+
+/205 manger can see 1001 request, and can not see if it is 300
+
+Create a Manager Approval page:
+
+manager_id = :APP_USER
+
+APEX User --> Application User / Employee mapping --> EMPLOYEE_ID
+
+Report will be: */
+
+SELECT
+    lr.request_id,
+    e.employee_name,
+    lr.leave_type,
+    lr.from_date,
+    lr.to_date,
+    lr.number_of_days,
+    lr.reason,
+    lr.status
+FROM leave_request lr
+JOIN employee e
+  ON e.employee_id = lr.employee_id
+WHERE lr.status = 'PENDING_MANAGER'
+  AND lr.manager_id = :CURRENT_EMPLOYEE_ID;
+
+manager Approve :
+
+Validate manager owns request --> Validate status = PENDING_MANAGER --> Update status = PENDING_HR --> Insert history record --> Create HR task
+
+Example when we use through PL/SQL:
+
+UPDATE leave_request
+   SET status = 'PENDING_HR',
+       updated_date = SYSTIMESTAMP
+ WHERE request_id = :P20_REQUEST_ID
+   AND manager_id = :CURRENT_EMPLOYEE_ID
+   AND status = 'PENDING_MANAGER';
+
+Then verify:
+
+IF SQL%ROWCOUNT <> 1 THEN
+    RAISE_APPLICATION_ERROR(
+        -20001,
+        'You are not authorized to approve this request.'
+    );
+END IF;
+
+For back tracking purpose:
+
+INSERT INTO leave_request_history (
+    request_id,
+    action_by,
+    action_role,
+    action,
+    old_status,
+    new_status,
+    comments
+)
+VALUES (
+    :P20_REQUEST_ID,
+    :CURRENT_EMPLOYEE_ID,
+    'MANAGER',
+    'APPROVE',
+    'PENDING_MANAGER',
+    'PENDING_HR',
+    :P20_COMMENTS
+);
+
+For Manger Rejection:
+
+UPDATE leave_request
+   SET status = 'REJECTED',
+       updated_date = SYSTIMESTAMP
+ WHERE request_id = :P20_REQUEST_ID
+   AND manager_id = :CURRENT_EMPLOYEE_ID
+   AND status = 'PENDING_MANAGER';
+
+Then Leave History:
+
+UPDATE leave_request
+   SET status = 'REJECTED',
+       updated_date = SYSTIMESTAMP
+ WHERE request_id = :P20_REQUEST_ID
+   AND manager_id = :CURRENT_EMPLOYEE_ID
+   AND status = 'PENDING_MANAGER';
+
+Then send the employee email, For example with Apex:
+
+APEX_MAIL.SEND(
+    p_to   => l_employee_email,
+    p_from => 'hr@company.com',
+    p_subj => 'Leave Request Rejected',
+    p_body => 'Your leave request #' ||
+              :P20_REQUEST_ID ||
+              ' has been rejected.'
+);
+
+For remember to use:
+
+APEX_MAIL.PUSH_QUEUE;
+
+

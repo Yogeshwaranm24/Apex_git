@@ -1,0 +1,31 @@
+Employee Status Page
+
+For creating My Leave Requests page:
+
+SELECT
+    lr.request_id,
+    lr.leave_type,
+    lr.from_date,
+    lr.to_date,
+    lr.number_of_days,
+    lr.reason,
+    lr.status,
+    lr.created_date,
+    lr.updated_date
+FROM leave_request lr
+WHERE lr.employee_id = :CURRENT_EMPLOYEE_ID
+ORDER BY lr.created_date DESC;
+
+To request the display detail page:
+
+SELECT
+    action_date,
+    action_role,
+    action,
+    old_status,
+    new_status,
+    comments
+FROM leave_request_history
+WHERE request_id = :P_REQUEST_ID
+ORDER BY action_date;
+
